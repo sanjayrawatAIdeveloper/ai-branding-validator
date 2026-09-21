@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 type HeaderProps = {
   navigationToggle: ReactNode;
@@ -44,12 +45,12 @@ export function Header({ navigationToggle }: HeaderProps) {
               />
             </svg>
           </button>
-          <button
-            type="button"
+          <Link
+            href="/projects/new"
             className="inline-flex h-10 items-center rounded-lg bg-primary px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             New Project
-          </button>
+          </Link>
         </div>
       </div>
     </header>
