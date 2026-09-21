@@ -80,6 +80,8 @@ export function ProjectSetupForm() {
       return;
     }
 
+    setOrganizationName(organizationName.trim());
+    setHomepageUrl(homepageUrl.trim());
     setShowSuccess(true);
   }
 
