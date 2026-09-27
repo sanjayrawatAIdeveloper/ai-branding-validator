@@ -1,0 +1,15 @@
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function formatCount(value: number, singular: string, plural: string): string {
+  return `${value.toLocaleString("en-US")} ${value === 1 ? singular : plural}`;
+}
