@@ -183,7 +183,8 @@ export function ProjectSetupForm() {
   const fileTypeLabel = guidelineSource === "pdf" ? "PDF" : "JSON";
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+    <form className="min-w-0 space-y-6" onSubmit={handleSubmit} noValidate>
+      <div className="mx-auto w-full max-w-2xl space-y-6">
       {serverError ? (
         <div
           ref={errorRef}
@@ -388,6 +389,7 @@ export function ProjectSetupForm() {
         >
           {isProcessing ? "Processing..." : "Continue"}
         </button>
+      </div>
       </div>
 
       {result ? (

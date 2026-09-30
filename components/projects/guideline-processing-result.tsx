@@ -26,7 +26,7 @@ export function GuidelineProcessingResult({
       role="status"
       tabIndex={-1}
       aria-labelledby="guideline-processing-heading"
-      className="rounded-xl border border-success/20 bg-card p-5 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:p-6"
+      className="min-w-0 rounded-xl border border-success/20 bg-card p-5 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:p-6"
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-success">
         Success
@@ -84,30 +84,37 @@ export function GuidelineProcessingResult({
         </p>
       ) : (
         <div className="mt-5 min-w-0">
-          <h4 className="text-sm font-semibold text-ink">Normalized rules</h4>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-left text-sm">
+          <h4 id="normalized-rules-heading" className="text-sm font-semibold text-ink">
+            Normalized rules
+          </h4>
+          <div
+            role="region"
+            aria-labelledby="normalized-rules-heading"
+            tabIndex={0}
+            className="mt-3 overflow-x-auto rounded-lg border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            <table className="w-full min-w-[62rem] text-left text-sm">
               <caption className="sr-only">
                 Normalized guideline rules extracted from the uploaded file
               </caption>
               <thead className="bg-canvas text-xs font-semibold uppercase tracking-wide text-muted">
                 <tr>
-                  <th scope="col" className="px-3 py-2.5 whitespace-nowrap">
+                  <th scope="col" className="min-w-[7.5rem] px-3 py-2.5 whitespace-nowrap">
                     Rule ID
                   </th>
-                  <th scope="col" className="px-3 py-2.5 whitespace-nowrap">
+                  <th scope="col" className="min-w-[8rem] px-3 py-2.5 whitespace-nowrap">
                     Category
                   </th>
-                  <th scope="col" className="px-3 py-2.5 whitespace-nowrap">
+                  <th scope="col" className="min-w-[14rem] px-3 py-2.5">
                     Title
                   </th>
-                  <th scope="col" className="px-3 py-2.5">
+                  <th scope="col" className="min-w-[20rem] px-3 py-2.5">
                     Description
                   </th>
-                  <th scope="col" className="px-3 py-2.5 whitespace-nowrap">
+                  <th scope="col" className="min-w-[6.25rem] px-3 py-2.5 whitespace-nowrap">
                     Severity
                   </th>
-                  <th scope="col" className="px-3 py-2.5 whitespace-nowrap">
+                  <th scope="col" className="min-w-[6.25rem] px-3 py-2.5 whitespace-nowrap">
                     Enabled status
                   </th>
                 </tr>
@@ -122,9 +129,7 @@ export function GuidelineProcessingResult({
                       {rule.category}
                     </td>
                     <td className="px-3 py-2.5 text-ink">{rule.title}</td>
-                    <td className="max-w-md px-3 py-2.5 text-ink">
-                      {rule.description}
-                    </td>
+                    <td className="px-3 py-2.5 text-ink">{rule.description}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${severityClassName[rule.severity]}`}
