@@ -2,6 +2,14 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { GuidelineProcessingResult } from "@/components/projects/guideline-processing-result";
+import { MAX_FILE_SIZE_BYTES } from "@/lib/guidelines/constants";
+import { formatFileSize } from "@/lib/guidelines/format";
+import { readGuidelineProcessingResponse } from "@/lib/guidelines/read-response";
+import type {
+  GuidelineProcessingErrorBody,
+  GuidelineProcessingSuccess,
+} from "@/types/guideline-processing";
 import type {
   GuidelineSource,
   ProjectSetupErrors,
@@ -12,29 +20,56 @@ const inputClassName =
 
 const errorClassName = "mt-2 text-sm text-critical";
 
+const unexpectedError: GuidelineProcessingErrorBody = {
+  code: "UNEXPECTED_ERROR",
+  message: "Guidelines could not be processed. Try again.",
+};
+
 export function ProjectSetupForm() {
   const [organizationName, setOrganizationName] = useState("");
   const [homepageUrl, setHomepageUrl] = useState("");
   const [guidelineSource, setGuidelineSource] = useState<GuidelineSource>("pdf");
   const [file, setFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<ProjectSetupErrors>({});
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [serverError, setServerError] = useState<GuidelineProcessingErrorBody | null>(
+    null,
+  );
+  const [result, setResult] = useState<GuidelineProcessingSuccess | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const organizationRef = useRef<HTMLInputElement>(null);
   const homepageRef = useRef<HTMLInputElement>(null);
-  const statusRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+  const processingRequestId = useRef(0);
+  const inFlightRef = useRef(false);
 
   const organizationErrorId = useId();
   const homepageErrorId = useId();
   const fileErrorId = useId();
   const fileHelpId = useId();
+  const serverErrorHeadingId = useId();
 
   useEffect(() => {
-    if (showSuccess) {
-      statusRef.current?.focus();
+    if (serverError) {
+      errorRef.current?.focus();
     }
-  }, [showSuccess]);
+  }, [serverError]);
+
+  useEffect(() => {
+    if (result) {
+      resultRef.current?.focus();
+    }
+  }, [result]);
+
+  function clearProcessingOutcome() {
+    processingRequestId.current += 1;
+    inFlightRef.current = false;
+    setResult(null);
+    setServerError(null);
+    setIsProcessing(false);
+  }
 
   function clearFile() {
     setFile(null);
@@ -47,11 +82,15 @@ export function ProjectSetupForm() {
     setGuidelineSource(source);
     clearFile();
     setErrors((current) => ({ ...current, file: undefined }));
-    setShowSuccess(false);
+    clearProcessingOutcome();
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (inFlightRef.current || isProcessing) {
+      return;
+    }
 
     const nextErrors = validateProjectSetup({
       organizationName,
@@ -63,50 +102,116 @@ export function ProjectSetupForm() {
     setErrors(nextErrors);
 
     if (nextErrors.organizationName) {
-      setShowSuccess(false);
+      clearProcessingOutcome();
       organizationRef.current?.focus();
       return;
     }
 
     if (nextErrors.homepageUrl) {
-      setShowSuccess(false);
+      clearProcessingOutcome();
       homepageRef.current?.focus();
       return;
     }
 
-    if (nextErrors.file) {
-      setShowSuccess(false);
+    if (nextErrors.file || !file) {
+      clearProcessingOutcome();
       fileInputRef.current?.focus();
       return;
     }
 
+    const selectedFile = file;
+    const requestId = processingRequestId.current + 1;
+    processingRequestId.current = requestId;
+    inFlightRef.current = true;
+
     setOrganizationName(organizationName.trim());
     setHomepageUrl(homepageUrl.trim());
-    setShowSuccess(true);
+    setServerError(null);
+    setResult(null);
+    setIsProcessing(true);
+
+    const formData = new FormData();
+    formData.append("sourceType", guidelineSource);
+    formData.append("guidelineFile", selectedFile);
+
+    try {
+      const response = await fetch("/api/guidelines/process", {
+        method: "POST",
+        body: formData,
+      });
+
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (processingRequestId.current !== requestId) {
+        return;
+      }
+
+      const parsed = readGuidelineProcessingResponse(payload);
+      if (parsed?.ok) {
+        setServerError(null);
+        setResult(parsed);
+        return;
+      }
+
+      setResult(null);
+      setServerError(parsed?.error ?? unexpectedError);
+    } catch {
+      if (processingRequestId.current !== requestId) {
+        return;
+      }
+
+      setResult(null);
+      setServerError({
+        code: "UNEXPECTED_ERROR",
+        message:
+          "Guidelines could not be processed. Check your connection and try again.",
+      });
+    } finally {
+      if (processingRequestId.current === requestId) {
+        inFlightRef.current = false;
+        setIsProcessing(false);
+      }
+    }
   }
 
   const accept = guidelineSource === "pdf" ? ".pdf,application/pdf" : ".json,application/json";
   const fileTypeLabel = guidelineSource === "pdf" ? "PDF" : "JSON";
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit} noValidate>
-      {showSuccess ? (
+    <form className="min-w-0 space-y-6" onSubmit={handleSubmit} noValidate>
+      <div className="mx-auto w-full max-w-2xl space-y-6">
+      {serverError ? (
         <div
-          ref={statusRef}
-          role="status"
+          ref={errorRef}
+          role="alert"
           tabIndex={-1}
-          className="rounded-xl border border-success/20 bg-success-soft px-4 py-3 text-sm text-success outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          aria-labelledby={serverErrorHeadingId}
+          className="rounded-xl border border-critical/20 bg-critical-soft px-4 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
-          Project details are valid. Guideline processing will be added in the
-          next phase.
+          <h3 id={serverErrorHeadingId} className="font-semibold text-critical">
+            Guidelines could not be processed
+          </h3>
+          <p className="mt-1">Error: {serverError.message}</p>
+          {serverError.details && serverError.details.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {serverError.details.map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 
       <div className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
         <h3 className="text-sm font-semibold text-ink">Project details</h3>
         <p className="mt-1 text-sm text-muted">
-          File processing is not active yet. This form only checks the details
-          you enter.
+          Upload a PDF or JSON guideline file to extract structured rules. The
+          file is processed in memory and is not stored.
         </p>
 
         <div className="mt-6 space-y-5">
@@ -133,7 +238,7 @@ export function ProjectSetupForm() {
               value={organizationName}
               onChange={(event) => {
                 setOrganizationName(event.target.value);
-                setShowSuccess(false);
+                clearProcessingOutcome();
               }}
               className={inputClassName}
             />
@@ -167,7 +272,7 @@ export function ProjectSetupForm() {
               value={homepageUrl}
               onChange={(event) => {
                 setHomepageUrl(event.target.value);
-                setShowSuccess(false);
+                clearProcessingOutcome();
               }}
               className={inputClassName}
             />
@@ -225,13 +330,14 @@ export function ProjectSetupForm() {
               onChange={(event) => {
                 const nextFile = event.target.files?.[0] ?? null;
                 setFile(nextFile);
-                setShowSuccess(false);
+                setErrors((current) => ({ ...current, file: undefined }));
+                clearProcessingOutcome();
               }}
               className="mt-2 w-full text-sm text-ink file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             />
             <p id={fileHelpId} className="mt-2 text-xs text-muted">
-              Accepts {fileTypeLabel} files only. The file is not uploaded or
-              read in this phase.
+              Accepts {fileTypeLabel} files up to 5 MB. The file is processed in
+              memory and is not stored.
             </p>
             {file ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-canvas px-3 py-2.5">
@@ -244,7 +350,8 @@ export function ProjectSetupForm() {
                   className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-ink hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   onClick={() => {
                     clearFile();
-                    setShowSuccess(false);
+                    setErrors((current) => ({ ...current, file: undefined }));
+                    clearProcessingOutcome();
                     fileInputRef.current?.focus();
                   }}
                 >
@@ -261,6 +368,12 @@ export function ProjectSetupForm() {
         </div>
       </div>
 
+      {isProcessing ? (
+        <p role="status" className="text-sm text-muted">
+          Processing guidelines…
+        </p>
+      ) : null}
+
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link
           href="/"
@@ -270,11 +383,18 @@ export function ProjectSetupForm() {
         </Link>
         <button
           type="submit"
-          className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          disabled={isProcessing}
+          aria-busy={isProcessing}
+          className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Continue
+          {isProcessing ? "Processing..." : "Continue"}
         </button>
       </div>
+      </div>
+
+      {result ? (
+        <GuidelineProcessingResult result={result} resultRef={resultRef} />
+      ) : null}
     </form>
   );
 }
@@ -347,6 +467,8 @@ function validateProjectSetup({
       guidelineSource === "pdf"
         ? "Choose a .pdf file."
         : "Choose a .json file.";
+  } else if (file.size > MAX_FILE_SIZE_BYTES) {
+    nextErrors.file = "The guideline file must be 5 MB or smaller.";
   }
 
   return nextErrors;
@@ -355,16 +477,4 @@ function validateProjectSetup({
 function fileNameMatchesSource(fileName: string, source: GuidelineSource): boolean {
   const lower = fileName.toLowerCase();
   return source === "pdf" ? lower.endsWith(".pdf") : lower.endsWith(".json");
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
